@@ -115,7 +115,7 @@ class CustomTransforms():
             "resize_tensor": albumentations.Compose([
                 albumentations.Resize(256, 256),
                 albumentations.pytorch.transforms.ToTensorV2()
-            ])
+            ]),
         }
         self.img_set = My_data(files, transforms=self.transform["resize_tensor"])
 

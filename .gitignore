@@ -1,2 +1,6 @@
 BreaKHis_v1/
 dataset/
+*.png
+Master.pth
+.vscode
+__pycache__
