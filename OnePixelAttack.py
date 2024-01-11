@@ -55,19 +55,19 @@ def probability_classes(perturbation, image, org_class, model, device):
 
 def predict(perturbation, image, org_class, model, device, image_list, minimize=True):
 
-    print(len(perturbation))
-    print(perturbation)
+    # print(len(perturbation))
+    # print(perturbation)
 
-    image_list.append(image)
+#     image_list.append(image)
 
 
-    if len(image_list) > 1:
-        print("Checking original images")
-        for i in range(1, len(image_list)):
-            if len(torch.nonzero(~torch.eq(image_list[i][0], image_list[i-1][0]))) > 0:
-                print("Source images are not the same")
-                print(torch.nonzero(~torch.eq(image_list[i][0], image_list[i-1][0])))
-        image_list.pop(0)
+#     if len(image_list) > 1:
+#         # print("Checking original images")
+#         for i in range(1, len(image_list)):
+#             if len(torch.nonzero(~torch.eq(image_list[i][0], image_list[i-1][0]))) > 0:
+#                 # print("Source images are not the same")
+#                 # print(torch.nonzero(~torch.eq(image_list[i][0], image_list[i-1][0])))
+#         image_list.pop(0)
 
     #print("OriginalImage", image)
 
@@ -85,8 +85,8 @@ def predict(perturbation, image, org_class, model, device, image_list, minimize=
     original_output = model(image.to(device))
     perturbed_output = model(attacked_image.to(device))
 
-    print("Original", original_output[0][0])
-    print("Perturbed", perturbed_output[0][0])
+#     print("Original", original_output[0][0])
+#     print("Perturbed", perturbed_output[0][0])
 
     return perturbed_output[0][org_class].item()
 
@@ -95,12 +95,12 @@ def attack_success(perturbation, image, org_class, model, device):
 
     attacked_image = perturb_image_one_pixel(perturbation, torch.clone(image))
 
-    print("Checking if succesful")
+    # print("Checking if succesful")
     confidences = model(attacked_image.to(device))[0]
     predicted_class = torch.argmax(confidences)
 
-    print(confidences)
-    print(predicted_class, org_class)
+    # print(confidences)
+    # print(predicted_class, org_class)
 
     if predicted_class != org_class:
         return True
@@ -121,11 +121,8 @@ def attack(index, model, device, image, label, pixel_count=1, maxiter=50, popsiz
     torch.cuda.empty_cache()
  
     model.to(device)
-
-    max_pixel_val = 10
-    min_pixel_val = -10
-
-    bounds = [[(0, 256), (0,256), (min_pixel_val ,max_pixel_val), (min_pixel_val ,max_pixel_val), (min_pixel_val ,max_pixel_val)] * pixel_count]
+    
+    bounds = [[(0, 256), (0,256), (0,1), (0,1), (0,1)] * pixel_count]
     # The population has size popsize * (N - N_equal)
     popsize = popsize // len(bounds[0])
 
@@ -137,7 +134,7 @@ def attack(index, model, device, image, label, pixel_count=1, maxiter=50, popsiz
     
     # Function that keeps track of the best solution found so far.
     def callback(x, convergence=None):
-        print("\n Called as callback")
+        # print("\n Called as callback")
         return attack_success(x, torch.clone(image), org_class, model, device)
 
     result = differential_evolution(
@@ -146,20 +143,24 @@ def attack(index, model, device, image, label, pixel_count=1, maxiter=50, popsiz
         callback=callback, polish=False
     )
 
-    print("Result", result.message)
+    print("\n Result", result.message)
     print("Success", result.success)
-
-    print("\n DE Finished")
 
     model.to('cpu')
 
     pert_image = perturb_image_one_pixel(result.x, torch.clone(image))
 
+    org_output = model(image)
+    pert_output = model(torch.Tensor(pert_image))
+    
+    print(org_output, pert_output)
+    
     pert_pred = torch.nn.functional.softmax(model(torch.Tensor(pert_image)), dim=1)
     pert_class = torch.argmax(pert_pred).detach().numpy()
 
     print(org_class, pert_class)
     
+    # checken of de predicted class met originele plaatje gelijk aan de true class (uit label), zo niet is ie verkeerd geclassificeerd en betekend dat niet dat de pertubation successful is.
     successful = pert_class != org_class
 
     if successful:

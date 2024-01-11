@@ -82,8 +82,9 @@ class FocalLoss(nn.Module):
             loss = loss * weight
         return loss
     
+    
 class CustomTransforms():
-    def __init__(self, files):
+    def __init__(self):
         self.transform = {
             'train': albumentations.Compose([
                 albumentations.Resize(256, 256),
@@ -101,12 +102,17 @@ class CustomTransforms():
 
             'valid': albumentations.Compose([
                 albumentations.Resize(256, 256),
-                albumentations.Normalize(mean=(0.786, 0.623, 0.766),
-                                std=(0.105, 0.138, 0.089), p=1),
+                albumentations.Normalize(mean=(0.5, 0.5, 0.5),
+                                std=(1.0, 1.0, 1.0), p=1),
                 albumentations.pytorch.transforms.ToTensorV2()
             ]),
 
-            'test': None,
+            'test': albumentations.Compose([
+                albumentations.Resize(256, 256),
+                albumentations.Normalize(mean=(0, 0, 0),
+                                std=(255, 255, 255), max_pixel_value=1.0, p=1),
+                albumentations.pytorch.transforms.ToTensorV2()
+            ]),
 
             'resize': albumentations.Compose([
                 albumentations.Resize(256, 256),
@@ -117,27 +123,6 @@ class CustomTransforms():
                 albumentations.pytorch.transforms.ToTensorV2()
             ]),
         }
-        self.img_set = My_data(files, transforms=self.transform["resize_tensor"])
-
-        ## TODO: revisit this, the means are not necessarily the means of the pixel values per chanel
-        mean_list = [0, 0, 0]
-        std_list = [0, 0, 0]
-        for img in self.img_set:
-            for i, rgb in enumerate(img[0]):
-                rgb = rgb.float()
-                mean_list[i] += torch.mean(rgb)
-                std_list[i] += torch.std(rgb)
-
-        n = len(self.img_set) * 255
-        means = [x/n for x in mean_list]
-        stds = [x/n for x in std_list]
-
-        self.transform["test"] = albumentations.Compose([
-            albumentations.Resize(256, 256),
-            albumentations.Normalize(mean=tuple([mean.item() for mean in means]), std=tuple([std.item() for std in stds])),
-            albumentations.pytorch.transforms.ToTensorV2(),
-        ])
-        del self.img_set
 
     def get_transform(self, transformer):
         try:
