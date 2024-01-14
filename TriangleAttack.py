@@ -97,20 +97,20 @@ class TA:
     def get_x_hat_in_2d(self, x_o: torch.Tensor, x_adv: torch.Tensor, axis_unit1: torch.Tensor, axis_unit2: torch.Tensor,
                         net: torch.nn.Module, queries, original_label, max_iter=2,plus_learning_rate=0.01,minus_learning_rate=0.0005,half_range=0.1, init_alpha = np.pi/2):
         if not hasattr(self.get_x_hat_in_2d, 'alpha'):
-            self.get_x_hat_in_2d.alpha = init_alpha
+            self.get_x_hat_in_2d_alpha = init_alpha
         upper = np.pi / 2 + half_range
         lower = np.pi / 2 - half_range
 
         d = torch.norm(x_adv - x_o, p=2)
 
-        theta = max(np.pi - 2 * self.get_x_hat_in_2d.alpha, 0) + min(np.pi / 16, self.get_x_hat_in_2d.alpha / 2)
+        theta = max(np.pi - 2 * self.get_x_hat_in_2d_alpha, 0) + min(np.pi / 16, self.get_x_hat_in_2d_alpha / 2)
         x_hat = torch_dct.idct_2d(x_adv)
-        right_theta = np.pi - self.get_x_hat_in_2d.alpha
-        x = x_o + d * (axis_unit1 * np.cos(theta) + axis_unit2 * np.sin(theta)) / np.sin(self.get_x_hat_in_2d.alpha) * np.sin(
-            self.get_x_hat_in_2d.alpha + theta)
+        right_theta = np.pi - self.get_x_hat_in_2d_alpha
+        x = x_o + d * (axis_unit1 * np.cos(theta) + axis_unit2 * np.sin(theta)) / np.sin(self.get_x_hat_in_2d_alpha) * np.sin(
+            self.get_x_hat_in_2d_alpha + theta)
         x = torch_dct.idct_2d(x)
-        self.get_x_hat_in_2d.total += 1
-        self.get_x_hat_in_2d.clamp += torch.sum(x > 1) + torch.sum(x < 0)
+        self.get_x_hat_in_2d_total += 1
+        self.get_x_hat_in_2d_clamp += torch.sum(x > 1) + torch.sum(x < 0)
         x = torch.clamp(x, 0, 1)
         label = self.get_label(net(x))
         queries += 1
@@ -120,16 +120,16 @@ class TA:
             flag = 1
         else:
 
-            self.get_x_hat_in_2d.alpha -= minus_learning_rate
-            self.get_x_hat_in_2d.alpha = max(lower, self.get_x_hat_in_2d.alpha)
-            theta = max(theta, np.pi - 2 * self.get_x_hat_in_2d.alpha + np.pi / 64)
+            self.get_x_hat_in_2d_alpha -= minus_learning_rate
+            self.get_x_hat_in_2d_alpha = max(lower, self.get_x_hat_in_2d_alpha)
+            theta = max(theta, np.pi - 2 * self.get_x_hat_in_2d_alpha + np.pi / 64)
 
             x = x_o + d * (axis_unit1 * np.cos(theta) - axis_unit2 * np.sin(theta)) / np.sin(
-                self.get_x_hat_in_2d.alpha) * np.sin(
-                self.get_x_hat_in_2d.alpha + theta)  # * mask
+                self.get_x_hat_in_2d_alpha) * np.sin(
+                self.get_x_hat_in_2d_alpha + theta)  # * mask
             x = torch_dct.idct_2d(x)
-            self.get_x_hat_in_2d.total += 1
-            self.get_x_hat_in_2d.clamp += torch.sum(x > 1) + torch.sum(x < 0)
+            self.get_x_hat_in_2d_total += 1
+            self.get_x_hat_in_2d_clamp += torch.sum(x > 1) + torch.sum(x < 0)
             x = torch.clamp(x, 0, 1)
             label = self.get_label(net(x))
             queries += 1
@@ -138,57 +138,57 @@ class TA:
                 left_theta = theta
                 flag = -1
             else:
-                self.get_x_hat_in_2d.alpha -= minus_learning_rate
-                self.get_x_hat_in_2d.alpha = max(self.get_x_hat_in_2d.alpha, lower)
+                self.get_x_hat_in_2d_alpha -= minus_learning_rate
+                self.get_x_hat_in_2d_alpha = max(self.get_x_hat_in_2d_alpha, lower)
                 return x_hat, queries, False
 
         # binary search for beta
         theta = (left_theta + right_theta) / 2
         for i in range(max_iter):
             x = x_o + d * (axis_unit1 * np.cos(theta) + flag * axis_unit2 * np.sin(theta)) / np.sin(
-                self.get_x_hat_in_2d.alpha) * np.sin(
-                self.get_x_hat_in_2d.alpha + theta)
+                self.get_x_hat_in_2d_alpha) * np.sin(
+                self.get_x_hat_in_2d_alpha + theta)
             x = torch_dct.idct_2d(x)
-            self.get_x_hat_in_2d.total += 1
-            self.get_x_hat_in_2d.clamp += torch.sum(x > 1) + torch.sum(x < 0)
+            self.get_x_hat_in_2d_total += 1
+            self.get_x_hat_in_2d_clamp += torch.sum(x > 1) + torch.sum(x < 0)
             x = torch.clamp(x, 0, 1)
             label = self.get_label(net(x))
             queries += 1
             if label != original_label:
                 left_theta = theta
                 x_hat = x
-                self.get_x_hat_in_2d.alpha += plus_learning_rate
+                self.get_x_hat_in_2d_alpha += plus_learning_rate
                 return x_hat, queries, True
             else:
 
-                self.get_x_hat_in_2d.alpha -= minus_learning_rate
-                self.get_x_hat_in_2d.alpha = max(lower, self.get_x_hat_in_2d.alpha)
-                theta = max(theta, np.pi - 2 * self.get_x_hat_in_2d.alpha + np.pi / 64)
+                self.get_x_hat_in_2d_alpha -= minus_learning_rate
+                self.get_x_hat_in_2d_alpha = max(lower, self.get_x_hat_in_2d_alpha)
+                theta = max(theta, np.pi - 2 * self.get_x_hat_in_2d_alpha + np.pi / 64)
 
                 flag = -flag
                 x = x_o + d * (axis_unit1 * np.cos(theta) + flag * axis_unit2 * np.sin(theta)) / np.sin(
-                    self.get_x_hat_in_2d.alpha) * np.sin(
-                    self.get_x_hat_in_2d.alpha + theta)
+                    self.get_x_hat_in_2d_alpha) * np.sin(
+                    self.get_x_hat_in_2d_alpha + theta)
                 x = torch_dct.idct_2d(x)
-                self.get_x_hat_in_2d.total += 1
-                self.get_x_hat_in_2d.clamp += torch.sum(x > 1) + torch.sum(x < 0)
+                self.get_x_hat_in_2d_total += 1
+                self.get_x_hat_in_2d_clamp += torch.sum(x > 1) + torch.sum(x < 0)
                 x = torch.clamp(x, 0, 1)
                 label = self.get_label(net(x))
                 queries += 1
                 if label != original_label:
                     left_theta = theta
                     x_hat = x
-                    self.get_x_hat_in_2d.alpha += plus_learning_rate
-                    self.get_x_hat_in_2d.alpha = min(upper, self.get_x_hat_in_2d.alpha)
+                    self.get_x_hat_in_2d_alpha += plus_learning_rate
+                    self.get_x_hat_in_2d_alpha = min(upper, self.get_x_hat_in_2d_alpha)
                     return x_hat, queries, True
                 else:
-                    self.get_x_hat_in_2d.alpha -= minus_learning_rate
-                    self.get_x_hat_in_2d.alpha = max(lower, self.get_x_hat_in_2d.alpha)
-                    left_theta = max(np.pi - 2 * self.get_x_hat_in_2d.alpha, 0) + min(np.pi / 16, self.get_x_hat_in_2d.alpha / 2)
+                    self.get_x_hat_in_2d_alpha -= minus_learning_rate
+                    self.get_x_hat_in_2d_alpha = max(lower, self.get_x_hat_in_2d_alpha)
+                    left_theta = max(np.pi - 2 * self.get_x_hat_in_2d_alpha, 0) + min(np.pi / 16, self.get_x_hat_in_2d_alpha / 2)
                     right_theta = theta
             theta = (left_theta + right_theta) / 2
-        self.get_x_hat_in_2d.alpha += plus_learning_rate
-        self.get_x_hat_in_2d.alpha = min(upper, self.get_x_hat_in_2d.alpha)
+        self.get_x_hat_in_2d_alpha += plus_learning_rate
+        self.get_x_hat_in_2d_alpha = min(upper, self.get_x_hat_in_2d_alpha)
         return x_hat, queries, True
 
 
@@ -203,7 +203,7 @@ class TA:
         queries = 0.
         dist = torch.norm(x_o - x_adv)
         intermediate = []
-        intermediate.append([0, dist.item(), self.get_x_hat_in_2d.alpha])
+        intermediate.append([0, dist.item(), self.get_x_hat_in_2d_alpha])
 
         while queries < self.max_queries :
 
@@ -216,7 +216,7 @@ class TA:
             x_adv = x_hat
 
             dist = torch.norm(x_hat - x_o)
-            intermediate.append([queries, dist.item(), self.get_x_hat_in_2d.alpha])
+            intermediate.append([queries, dist.item(), self.get_x_hat_in_2d_alpha])
             if queries >= self.max_queries:
                 break
         return x_hat, queries, intermediate
@@ -250,9 +250,17 @@ class TA:
         init_attack: MinimizationAttack = LinearSearchBlendedUniformNoiseAttack(steps=50)
         criterion = get_criterion(labels.long())
 
-        print(type(criterion), criterion)
+        if os.path.isfile('best_advs.pt'):
+            print("loading best_advs")
+            best_advs = torch.load('best_advs.pt')
+        else:
+            print("calculating best_advs")
+            best_advs = init_attack.run(self.net, images, criterion, early_stop=None)
+            torch.save(best_advs, 'best_advs.pt')
 
-        best_advs = init_attack.run(self.net, images, criterion, early_stop=None)
+        print("\n", best_advs[0], "\n")
+
+        
         max_length = 0
         acc = [0., 0., 0.]
         for i, [input, label] in enumerate(dataloader):
@@ -265,13 +273,14 @@ class TA:
             global selected_w
             selected_h = input.shape[1]
             selected_w = input.shape[2]
-            self.get_x_hat_in_2d.alpha = np.pi / 2
+            self.get_x_hat_in_2d_alpha = np.pi / 2
 
-            self.get_x_hat_in_2d.total = 0
-            self.get_x_hat_in_2d.clamp = 0
+            self.get_x_hat_in_2d_total = 0
+            self.get_x_hat_in_2d_clamp = 0
 
+            # ran until here
             x_adv, q, intermediate = self.get_x_hat_arbitary(input[np.newaxis, :, :, :], self.net,
-                                                        label.reshape(1, ).to(self.device),
+                                                        torch.argmax(label).to(self.device),
                                                         init_x=best_advs[i][np.newaxis, :, :, :], dim_num=self.dim_num)
             x_adv_list[i] = x_adv[0]
             diff = torch.norm(x_adv[0] - input, p=2) / (self.side_length * np.sqrt(3))
