@@ -3,6 +3,12 @@ import os
 import shutil
 import json
 import glob
+import urllib
+import tarfile
+import math
+import random
+import numpy as np
+import subprocess
 
 # images
 import cv2
@@ -53,6 +59,18 @@ class My_data(Dataset):
 
         return (im_as_im, labels)
     
+    def __getimages__(self):
+        images = []
+        for i in range(0, len(self.image_list)):
+            images.append(self.__getitem__(i)[0])
+        return torch.stack(images, dim=0)
+
+    def __getlabels__(self):
+        labels = []
+        for i in range(0, len(self.image_list)):
+            labels.append(self.__getitem__(i)[1])
+        return torch.stack(labels, dim=0)                
+    
     def __getname__(self, index):
         return self.image_list[index].split(os.sep)[-1]
     
@@ -67,20 +85,38 @@ class My_data(Dataset):
     
 
 class FocalLoss(nn.Module):
-    def __init__(self, gamma=2.0, class_weights=None):
+    def __init__(self, device, gamma=2.0, class_weights=torch.tensor([2.2232, 0.9754, 1.7378, 2.1744, 0.2868, 1.5779, 1.2469, 1.7619])):
         super(FocalLoss, self).__init__()
         self.gamma = gamma
         self.class_weights = class_weights
+        self.class_weights = self.class_weights.to(device)
 
     def forward(self, logits, labels):
+        # probs = torch.sigmoid(logits)
+        # ce_loss = nn.BCELoss()(probs, labels)
+        # weight = (1 - probs).pow(self.gamma)
+        # loss = ce_loss  # Initialize loss with cross-entropy loss
+
+        # if self.class_weights is not None:
+        #     weight = weight * self.class_weights
+        #     loss = loss * weight
+        # return loss
+
+        # Calculate BCE loss without reduction
+        bce_loss = nn.BCEWithLogitsLoss(weight=self.class_weights, reduction='none')(logits, labels)
+        
+        # Calculate probabilities
         probs = torch.sigmoid(logits)
-        ce_loss = nn.BCELoss()(probs, labels)
-        weight = (1 - probs).pow(self.gamma)
-        loss = ce_loss  # Initialize loss with cross-entropy loss
-        if self.class_weights is not None:
-            weight = weight * self.class_weights
-            loss = loss * weight
-        return loss
+        
+        # Calculate the focal loss scaling factor
+        focal_scaling = (1 - probs).pow(self.gamma)
+        
+        # Apply focal loss scaling factor to BCE loss
+        focal_loss = focal_scaling * bce_loss
+
+        # Aggregate the losses
+        return focal_loss.mean()
+
     
     
 class CustomTransforms():
@@ -95,15 +131,15 @@ class CustomTransforms():
                                     albumentations.GaussianBlur(),
                                     albumentations.NoOp()
                 ], p=1),
-                albumentations.Normalize(mean=(0.787, 0.625, 0.765),
-                                std=(0.105, 0.138, 0.089), p=1),
+                albumentations.Normalize(mean=(0, 0, 0),
+                                std=(255, 255, 255), max_pixel_value=1.0, p=1),
                 albumentations.pytorch.transforms.ToTensorV2()
             ]),
 
             'valid': albumentations.Compose([
                 albumentations.Resize(256, 256),
-                albumentations.Normalize(mean=(0.5, 0.5, 0.5),
-                                std=(1.0, 1.0, 1.0), p=1),
+                albumentations.Normalize(mean=(0, 0, 0),
+                                std=(255, 255, 255), max_pixel_value=1.0, p=1),
                 albumentations.pytorch.transforms.ToTensorV2()
             ]),
 
@@ -132,6 +168,98 @@ class CustomTransforms():
     
 
 ################################ Functions ################################
+#                                  CUDA                                   #
+def get_gpu_memory():
+    try:
+        # Run the nvidia-smi command to get memory usage
+        smi_output = subprocess.check_output("nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits", shell=True)
+        gpu_memory = [int(x) for x in smi_output.decode('utf-8').strip().split('\n')]
+        return gpu_memory
+    except Exception as e:
+        print(f"Error querying GPU memory: {e}")
+        return []
+
+def select_gpu():
+    if torch.cuda.is_available():
+        gpu_memory = get_gpu_memory()
+        if gpu_memory:
+            # Select the GPU with the most free memory
+            gpu_id = gpu_memory.index(max(gpu_memory))
+            print(f"Selecting GPU {gpu_id} with {gpu_memory[gpu_id]}MB free memory")
+            return gpu_id
+        else:
+            print("Unable to get GPU memory. Using default GPU.")
+            return 0
+    else:
+        print("CUDA not available. Using CPU.")
+        return "cpu"
+
+#                                  Data                                   #
+def get_data(path):
+    # Check whether the dataset exists on the system, if not, download and unzip the dataset
+    if not os.path.isdir(os.path.join(os.getcwd(), "BreaKHis_v1")):
+        urllib.request("http://www.inf.ufpr.br/vri/databases/BreaKHis_v1.tar.gz")
+        with tarfile.open("BreaKHis_v1.tar.gz") as tar:
+            tar.extractall("BreaKHis_v1")
+    
+    # Check the existance of the train.txt and test.txt files, if so, read them from the files
+    if os.path.isfile(os.path.join(os.getcwd(), "txt", "train.txt")) and os.path.isfile(os.path.join(os.getcwd(), "txt", "test.txt")):
+        train_dict = get_dict(os.path.join(os.getcwd(), "txt", "train.txt"))
+        test_dict = get_dict(os.path.join(os.getcwd(), "txt", "test.txt"))
+        correct = check_corrupted_imgs(train_dict, test_dict)
+    # if not, create the train test split
+    else:
+        train_dict, test_dict = create_train_test_split(path)
+
+    return train_dict, test_dict
+
+
+def create_train_test_split(data_path):
+    all_files = get_files(data_path)
+   
+    # Create dictionary that filters images based on class and zoom level
+    data_dict = {c: {z: [path for path in all_files if path.split("_")[-1].split("-")[0] == c and path.split("_")[-1].split("-")[3] == z] for z in zooms} for c in classes}
+
+    # Initialize empty dicts
+    train_dict = {c: {z: [] for z in zooms} for c in classes}
+    test_dict = {c: {z: [] for z in zooms} for c in classes}
+
+    # Make train/test split
+    train_test_split = 0.9
+
+    for c in data_dict.keys():
+        for z, v in data_dict[c].items():
+            split = math.ceil(train_test_split * len(v))
+
+            # Randomly sample from file paths for given class/zoom level
+            train_images = random.sample(data_dict[c][z], split)
+
+            # Take as test data all files that are not in the train data for a given class/zoom level
+            test_images = np.setdiff1d(data_dict[c][z], train_images)
+
+            # Check if error is made
+            if len(train_images) + len(test_images) != len(v):
+                print("Error in train/test split at {}-{}".format(c, z))
+
+            # Store train and test data in dictionaries
+            train_dict[c][z] = list(train_images)
+            test_dict[c][z] = list(test_images)
+
+    for c in classes:
+        for z in zooms:
+            print("Class {}, Zoom {}".format(c, z))
+            print("Total: {}, Train: {}, Test: {}".format(len(data_dict[c][z]), len(train_dict[c][z]), len(test_dict[c][z])))
+
+    with open(os.path.join("txt", "train.txt"), "w") as f:
+        json.dump(train_dict, f)
+
+    # Create test text file
+    with open(os.path.join("txt", "test.txt"), "w") as f:
+        json.dumps(test_dict, f)
+
+    return train_dict, test_dict
+
+
 # Takes all images from a train/test dict and copies them to new destination for easy access
 def copy_images(image_dict, type):
 
@@ -205,6 +333,8 @@ def check_corrupted_imgs(train_dict, test_dict):
         copy_images(train_dict, "train")
         copy_images(test_dict, "test")
 
+        correct = check_corrupted_imgs(train_dict, test_dict)
+
     return correct
     
 
@@ -223,7 +353,7 @@ def perturb_image(perturbation, img):
 
     return img
 
-
+#                                  Model                                  #
 def get_class_weigths(image_dict: dict):
     # Number of samples in each class
     # Assumption is made that in each fold, these are the same (since we do stratified split)
@@ -239,11 +369,18 @@ def get_class_weigths(image_dict: dict):
     return class_weights
 
 
-def get_model(device, image_dict: dict):
+def get_model(device, image_dict: dict, model:str="swin"):
     torch.cuda.empty_cache()
 
+    if model == "resnet":
+        model_name = "timm/resnet18.a1_in1k"
+        model_file = "Master_resnet.pth"
+    else:
+        model_name = 'swinv2_tiny_window8_256.ms_in1k'
+        model_file = "Master.pth"
+
     model = timm.create_model(
-        'swinv2_tiny_window8_256.ms_in1k',
+        model_name,
         pretrained=False,
         features_only=False,
         num_classes = 8,
@@ -251,12 +388,12 @@ def get_model(device, image_dict: dict):
     )
 
     class_weights = get_class_weigths(image_dict).to(device)
-    criterion = FocalLoss(class_weights)
+    criterion = FocalLoss(device, class_weights)
     optimizer = optim.AdamW(
         filter(lambda p: p.requires_grad, model.parameters()), 
         lr=1e-4)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.5)
-    checkpoint1 = torch.load('Master.pth', map_location=torch.device(device))
+    checkpoint1 = torch.load(model_file, map_location=torch.device(device))
     model.load_state_dict(checkpoint1['model_state_dict'])
     model = model.to(device)
     return model

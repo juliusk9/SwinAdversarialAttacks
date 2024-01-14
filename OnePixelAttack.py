@@ -118,7 +118,7 @@ def attack(index, model, device, image, label, pixel_count=1, maxiter=50, popsiz
     #print(torch.eq(image, image))
 
     # Clean up memory
-    torch.cuda.empty_cache()
+    # torch.cuda.empty_cache()
  
     model.to(device)
     
@@ -159,12 +159,16 @@ def attack(index, model, device, image, label, pixel_count=1, maxiter=50, popsiz
     pert_class = torch.argmax(pert_pred).detach().numpy()
 
     print(org_class, pert_class)
-    
-    # checken of de predicted class met originele plaatje gelijk aan de true class (uit label), zo niet is ie verkeerd geclassificeerd en betekend dat niet dat de pertubation successful is.
-    successful = pert_class != org_class
 
+    successful = False
+    correct_init_classification = False
+    # checken of de predicted class met originele plaatje gelijk aan de true class (uit label), zo niet is ie verkeerd geclassificeerd en betekend dat niet dat de pertubation successful is.
+    if org_class == torch.argmax(org_output).item():
+        correct_init_classification = True
+        successful = pert_class != org_class
+   
     if successful:
         save_image(pert_image.squeeze(), os.path.join(os.getcwd(), "dataset", "advanced_one_pixel", str(index) + "-attacked.png"))
         save_image(image.squeeze(), os.path.join(os.getcwd(), "dataset", "advanced_one_pixel", str(index) + "-original.png"))
 
-    return successful
+    return successful, correct_init_classification
