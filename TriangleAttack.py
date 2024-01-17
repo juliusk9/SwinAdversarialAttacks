@@ -29,9 +29,13 @@ class TA:
         self.minus_learning_rate = minus_learning_rate
         self.half_range = half_range
 
+
+    def get_label(self, logit):
+        return torch.argmax(logit, dim=1)
+
         
     # initialize an adversarial example with uniform noise
-    def get_x_adv(x_o: torch.Tensor, label: torch.Tensor, model) -> torch.Tensor:
+    def get_x_adv(self, x_o: torch.Tensor, label: torch.Tensor, model) -> torch.Tensor:
         criterion = get_criterion(label)
         init_attack: MinimizationAttack = LinearSearchBlendedUniformNoiseAttack(steps=100)
         x_adv = init_attack.run(model, x_o, criterion)
@@ -39,7 +43,7 @@ class TA:
 
 
     # coompute the difference
-    def get_difference(x_o: torch.Tensor, x_adv: torch.Tensor) -> torch.Tensor:
+    def get_difference(self, x_o: torch.Tensor, x_adv: torch.Tensor) -> torch.Tensor:
         difference = x_adv - x_o
         if torch.norm(difference, p=2) == 0:
             raise ('difference is zero vector!')
@@ -47,7 +51,7 @@ class TA:
         return difference
 
 
-    def rotate_in_2d(x_o2x_adv: torch.Tensor, direction: torch.Tensor, theta: float = np.pi / 8) -> torch.Tensor:
+    def rotate_in_2d(self, x_o2x_adv: torch.Tensor, direction: torch.Tensor, theta: float = np.pi / 8) -> torch.Tensor:
         alpha = torch.sum(x_o2x_adv * direction) / torch.sum(x_o2x_adv * x_o2x_adv)
         orthogonal = direction - alpha * x_o2x_adv
         direction_theta = x_o2x_adv * np.cos(theta) + torch.norm(x_o2x_adv, p=2) / torch.norm(orthogonal,
@@ -95,7 +99,7 @@ class TA:
 
     # compute the best adversarial example in the surface
     def get_x_hat_in_2d(self, x_o: torch.Tensor, x_adv: torch.Tensor, axis_unit1: torch.Tensor, axis_unit2: torch.Tensor,
-                        net: torch.nn.Module, queries, original_label, max_iter=2,plus_learning_rate=0.01,minus_learning_rate=0.0005,half_range=0.1, init_alpha = np.pi/2):
+                        queries, original_label, plus_learning_rate=0.01,minus_learning_rate=0.0005,half_range=0.1, init_alpha = np.pi/2):
         if not hasattr(self.get_x_hat_in_2d, 'alpha'):
             self.get_x_hat_in_2d_alpha = init_alpha
         upper = np.pi / 2 + half_range
@@ -112,7 +116,7 @@ class TA:
         self.get_x_hat_in_2d_total += 1
         self.get_x_hat_in_2d_clamp += torch.sum(x > 1) + torch.sum(x < 0)
         x = torch.clamp(x, 0, 1)
-        label = self.get_label(net(x))
+        label = self.get_label(self.net(x))
         queries += 1
         if label != original_label:
             x_hat = x
@@ -131,7 +135,7 @@ class TA:
             self.get_x_hat_in_2d_total += 1
             self.get_x_hat_in_2d_clamp += torch.sum(x > 1) + torch.sum(x < 0)
             x = torch.clamp(x, 0, 1)
-            label = self.get_label(net(x))
+            label = self.get_label(self.net(x))
             queries += 1
             if label != original_label:
                 x_hat = x
@@ -144,7 +148,7 @@ class TA:
 
         # binary search for beta
         theta = (left_theta + right_theta) / 2
-        for i in range(max_iter):
+        for i in range(self.max_iter_num_in_2d[0]):
             x = x_o + d * (axis_unit1 * np.cos(theta) + flag * axis_unit2 * np.sin(theta)) / np.sin(
                 self.get_x_hat_in_2d_alpha) * np.sin(
                 self.get_x_hat_in_2d_alpha + theta)
@@ -152,7 +156,7 @@ class TA:
             self.get_x_hat_in_2d_total += 1
             self.get_x_hat_in_2d_clamp += torch.sum(x > 1) + torch.sum(x < 0)
             x = torch.clamp(x, 0, 1)
-            label = self.get_label(net(x))
+            label = self.get_label(self.net(x))
             queries += 1
             if label != original_label:
                 left_theta = theta
@@ -173,7 +177,7 @@ class TA:
                 self.get_x_hat_in_2d_total += 1
                 self.get_x_hat_in_2d_clamp += torch.sum(x > 1) + torch.sum(x < 0)
                 x = torch.clamp(x, 0, 1)
-                label = self.get_label(net(x))
+                label = self.get_label(self.net(x))
                 queries += 1
                 if label != original_label:
                     left_theta = theta
@@ -192,11 +196,11 @@ class TA:
         return x_hat, queries, True
 
 
-    def get_x_hat_arbitary(self,x_o: torch.Tensor, net: torch.nn.Module, original_label, init_x=None,dim_num=5):
-        if self.get_label(net(x_o)) != original_label:
+    def get_x_hat_arbitary(self, x_o: torch.Tensor, original_label, init_x=None,dim_num=5):
+        if self.get_label(self.net(x_o)) != original_label:
             return x_o, 1001, [[0, 0.], [1001, 0.]]
         if init_x is None:
-            x_adv = self.get_x_adv(x_o, original_label, net)
+            x_adv = self.get_x_adv(x_o, original_label, self.net)
         else:
             x_adv = init_x
         x_hat = x_adv
@@ -212,7 +216,7 @@ class TA:
             direction, mask = self.get_orthogonal_1d_in_subspace(x_o2x_adv, dim_num, self.ratio_mask, self.dim_num)
             axis_unit2 = direction / torch.norm(direction)
             x_hat, queries, changed = self.get_x_hat_in_2d(torch_dct.dct_2d(x_o), torch_dct.dct_2d(x_adv), axis_unit1,
-                                                    axis_unit2, net, queries, original_label, max_iter=self.max_iter_num_in_2d,plus_learning_rate=self.plus_learning_rate,minus_learning_rate=self.minus_learning_rate,half_range=self.half_range, init_alpha=self.init_alpha)
+                                                    axis_unit2, queries, original_label ,plus_learning_rate=self.plus_learning_rate,minus_learning_rate=self.minus_learning_rate,half_range=self.half_range, init_alpha=self.init_alpha)
             x_adv = x_hat
 
             dist = torch.norm(x_hat - x_o)
@@ -264,6 +268,9 @@ class TA:
         max_length = 0
         acc = [0., 0., 0.]
         for i, [input, label] in enumerate(dataloader):
+            input = input.to(self.device)
+            label = label.to(self.device)
+
             print('[{}/{}]:'.format(i + 1, len(dataloader.dataset)), end='')
             global probability
             probability = np.ones(input.shape[1] * input.shape[2])
@@ -278,9 +285,12 @@ class TA:
             self.get_x_hat_in_2d_total = 0
             self.get_x_hat_in_2d_clamp = 0
 
-            # ran until here
-            x_adv, q, intermediate = self.get_x_hat_arbitary(input[np.newaxis, :, :, :], self.net,
-                                                        torch.argmax(label).to(self.device),
+            print(input.shape)
+            print(best_advs[i][np.newaxis, :, :, :].shape)
+
+            # ran until here [np.newaxis, :, :, :]
+            print(self.max_iter_num_in_2d)
+            x_adv, q, intermediate = self.get_x_hat_arbitary(input, torch.argmax(label).to(self.device),
                                                         init_x=best_advs[i][np.newaxis, :, :, :], dim_num=self.dim_num)
             x_adv_list[i] = x_adv[0]
             diff = torch.norm(x_adv[0] - input, p=2) / (self.side_length * np.sqrt(3))
