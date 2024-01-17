@@ -196,6 +196,7 @@ def select_gpu():
 
 #                                  Data                                   #
 def get_data(path):
+    # Path is where the train test split data lives
     # Check whether the dataset exists on the system, if not, download and unzip the dataset
     if not os.path.isdir(os.path.join(os.getcwd(), "BreaKHis_v1")):
         urllib.request("http://www.inf.ufpr.br/vri/databases/BreaKHis_v1.tar.gz")
@@ -299,7 +300,7 @@ def make_dirs(name):
 
 def get_dict(filepath):
     with open(os.path.join(os.getcwd(), "txt", filepath)) as f:
-        print("Opening Train.txt")
+        print(f"Opening {filepath}.txt")
         return json.load(f)
     
 
