@@ -150,25 +150,25 @@ def attack(index, model, device, image, label, pixel_count=1, maxiter=50, popsiz
 
     pert_image = perturb_image_one_pixel(result.x, torch.clone(image))
 
-    org_output = model(image)
-    pert_output = model(torch.Tensor(pert_image))
+    # org_output = model(image)
+    # pert_output = model(torch.Tensor(pert_image))
     
-    print(org_output, pert_output)
+    # print(org_output, pert_output)
     
-    pert_pred = torch.nn.functional.softmax(model(torch.Tensor(pert_image)), dim=1)
-    pert_class = torch.argmax(pert_pred).detach().numpy()
+    # pert_pred = torch.nn.functional.softmax(model(torch.Tensor(pert_image)), dim=1)
+    # pert_class = torch.argmax(pert_pred).detach().numpy()
 
-    print(org_class, pert_class)
+    # print(org_class, pert_class)
 
-    successful = False
-    correct_init_classification = False
-    # checken of de predicted class met originele plaatje gelijk aan de true class (uit label), zo niet is ie verkeerd geclassificeerd en betekend dat niet dat de pertubation successful is.
-    if org_class == torch.argmax(org_output).item():
-        correct_init_classification = True
-        successful = pert_class != org_class
+    # successful = False
+    # correct_init_classification = False
+    # # checken of de predicted class met originele plaatje gelijk aan de true class (uit label), zo niet is ie verkeerd geclassificeerd en betekend dat niet dat de pertubation successful is.
+    # if org_class == torch.argmax(org_output).item():
+    #     correct_init_classification = True
+    #     successful = pert_class != org_class
    
-    if successful:
-        save_image(pert_image.squeeze(), os.path.join(os.getcwd(), "dataset", "advanced_one_pixel", str(index) + "-attacked.png"))
-        save_image(image.squeeze(), os.path.join(os.getcwd(), "dataset", "advanced_one_pixel", str(index) + "-original.png"))
+    # if successful:
+    #     save_image(pert_image.squeeze(), os.path.join(os.getcwd(), "dataset", "advanced_one_pixel", str(index) + "-attacked.png"))
+    #     save_image(image.squeeze(), os.path.join(os.getcwd(), "dataset", "advanced_one_pixel", str(index) + "-original.png"))
 
-    return successful, correct_init_classification
+    return pert_image

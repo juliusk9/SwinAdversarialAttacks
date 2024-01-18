@@ -79,6 +79,9 @@ class My_data(Dataset):
     
     def __getclass__(self, index):
         return self.image_list[index].split("_")[-1].split("-")[0]
+    
+    def __getpath__(self, index):
+        return os.sep.join(self.image_list[index].split(os.sep)[-3:])
 
     def __len__(self):
         return self.data_len
@@ -375,10 +378,10 @@ def get_model(device, image_dict: dict, model:str="swin"):
 
     if model == "resnet":
         model_name = "timm/resnet18.a1_in1k"
-        model_file = "Master_resnet.pth"
+        model_file = "models/Master_resnet.pth"
     else:
         model_name = 'swinv2_tiny_window8_256.ms_in1k'
-        model_file = "Master.pth"
+        model_file = "models/Master_swin.pth"
 
     model = timm.create_model(
         model_name,
@@ -388,14 +391,8 @@ def get_model(device, image_dict: dict, model:str="swin"):
         drop_path_rate=0.2
     )
 
-    class_weights = get_class_weigths(image_dict).to(device)
-    criterion = FocalLoss(device, class_weights)
-    optimizer = optim.AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()), 
-        lr=1e-4)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.5)
-    checkpoint1 = torch.load(model_file, map_location=torch.device(device))
-    model.load_state_dict(checkpoint1['model_state_dict'])
+    if os.path.isfile(model_file):
+        checkpoint1 = torch.load(model_file, map_location=torch.device(device))
+        model.load_state_dict(checkpoint1['model_state_dict'])
     model = model.to(device)
     return model
-
