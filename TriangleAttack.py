@@ -46,7 +46,7 @@ class TA:
     def get_difference(self, x_o: torch.Tensor, x_adv: torch.Tensor) -> torch.Tensor:
         difference = x_adv - x_o
         if torch.norm(difference, p=2) == 0:
-            raise ('difference is zero vector!')
+            raise Exception('difference is zero vector!')
             return difference
         return difference
 
@@ -248,7 +248,7 @@ class TA:
 
         # print(output.shape)
 
-        x_adv_list = torch.zeros_like(images)
+        x_adv_list = torch.zeros_like(images, device=self.device)
         queries = []
         intermediates = []
         init_attack: MinimizationAttack = LinearSearchBlendedUniformNoiseAttack(steps=50)
@@ -264,7 +264,8 @@ class TA:
 
         print("\n", best_advs[0], "\n")
 
-        
+        best_advs = best_advs.to(self.device)
+
         max_length = 0
         acc = [0., 0., 0.]
         for i, [input, label] in enumerate(dataloader):
@@ -291,9 +292,9 @@ class TA:
             # ran until here [np.newaxis, :, :, :]
             print(self.max_iter_num_in_2d)
             x_adv, q, intermediate = self.get_x_hat_arbitary(input, torch.argmax(label).to(self.device),
-                                                        init_x=best_advs[i][np.newaxis, :, :, :], dim_num=self.dim_num)
-            x_adv_list[i] = x_adv[0]
-            diff = torch.norm(x_adv[0] - input, p=2) / (self.side_length * np.sqrt(3))
+                                                        init_x=best_advs[i].unsqueeze(0), dim_num=self.dim_num)
+            x_adv_list[i] = x_adv[0].to(self.device)
+            diff = torch.norm(x_adv[0].to(self.device) - input, p=2) / (self.side_length * np.sqrt(3))
             if diff <= 0.1:
                 acc[0] += 1
             if diff <= 0.05:

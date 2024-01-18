@@ -106,49 +106,47 @@ def attack_success(perturbation, image, org_class, model, device):
         return True
 
 
-def attack(index, model, device, image, label, pixel_count=1, maxiter=50, popsize=10):
-    make_dirs("advanced_one_pixel")
+def attack(index, model, device, dataloader, pixel_count=1, maxiter=50, popsize=10):
+    model.to(device)
+
+
     # # Returns image from the test dataset
     # sample = dataset[index]
 
     # # Image information
     # org_img = sample[0].unsqueeze(0)
-    org_class = torch.argmax(label).item()
-
-    #print(torch.eq(image, image))
-
-    # Clean up memory
-    # torch.cuda.empty_cache()
- 
-    model.to(device)
     
     bounds = [[(0, 256), (0,256), (0,1), (0,1), (0,1)] * pixel_count]
     # The population has size popsize * (N - N_equal)
     popsize = popsize // len(bounds[0])
+    #print(torch.eq(image, image))
+    pert_images = []
+    # Clean up memory
+    for i, (image, label) in enumerate(dataloader):
+        org_class = torch.argmax(label).item()
 
-    # This is the function taken by the differential evolution of SciPy to find the minimum of.
-    image_list = []
-    def func(perturb):
-        #print("\n Called as func")
-        return predict(perturb, torch.clone(image), org_class, model, device, image_list)
-    
-    # Function that keeps track of the best solution found so far.
-    def callback(x, convergence=None):
-        # print("\n Called as callback")
-        return attack_success(x, torch.clone(image), org_class, model, device)
+        # This is the function taken by the differential evolution of SciPy to find the minimum of.
+        image_list = []
+        def func(perturb):
+            #print("\n Called as func")
+            return predict(perturb, torch.clone(image), org_class, model, device, image_list)
+        
+        # Function that keeps track of the best solution found so far.
+        def callback(x, convergence=None):
+            # print("\n Called as callback")
+            return attack_success(x, torch.clone(image), org_class, model, device)
 
-    result = differential_evolution(
-        # removed from below: recombination=1, atol=-1, 
-        func, bounds[0], maxiter=maxiter, popsize=popsize, recombination=1, atol=-1, 
-        callback=callback, polish=False
-    )
+        result = differential_evolution(
+            # removed from below: recombination=1, atol=-1, 
+            func, bounds[0], maxiter=maxiter, popsize=popsize, recombination=1, atol=-1, 
+            callback=callback, polish=False
+        )
 
-    print("\n Result", result.message)
-    print("Success", result.success)
+        print("\n Result", result.message)
+        print("Success", result.success)
 
-    model.to('cpu')
-
-    pert_image = perturb_image_one_pixel(result.x, torch.clone(image))
+        pert_image = perturb_image_one_pixel(result.x, torch.clone(image))
+        pert_images.append(pert_image)
 
     # org_output = model(image)
     # pert_output = model(torch.Tensor(pert_image))
@@ -171,4 +169,4 @@ def attack(index, model, device, image, label, pixel_count=1, maxiter=50, popsiz
     #     save_image(pert_image.squeeze(), os.path.join(os.getcwd(), "dataset", "advanced_one_pixel", str(index) + "-attacked.png"))
     #     save_image(image.squeeze(), os.path.join(os.getcwd(), "dataset", "advanced_one_pixel", str(index) + "-original.png"))
 
-    return pert_image
+    return pert_images
