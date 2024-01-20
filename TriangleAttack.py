@@ -12,6 +12,7 @@ import sys
 import torch_dct
 import time
 
+## Probably unstable if GPU =/= cuda:0
 class TA:
     def __init__(self, model, input_device, side_length=256, seed=20, max_queries=1000, ratio_mask=0.1, dim_num=1, max_iter_num_in_2d=2, init_theta=2, 
                  init_alpha=np.pi/2, plus_learning_rate=0.1, minus_learning_rate=0.005, half_range=0.1):

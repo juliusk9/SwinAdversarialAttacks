@@ -22,68 +22,27 @@ class FocalLoss(nn.Module):
             weight = weight * self.class_weights
             loss = loss * weight
         return loss
+    
 
-def attack(dataloader, model, device, class_weights, num_steps, step_size, eps, clamp=(0, 1)):
-    images = dataloader.dataset.__getimages__()
-    labels = dataloader.dataset.__getlabels__()
+def pgd_attack(dataloader, model, device, class_weights, eps=0.3, alpha=2/255, iters=40):
+    outputs = list()
 
-    labels = torch.argmax(labels, dim=1)
+    for i, (image, label) in enumerate(dataloader):
+        image = image.to(device)
+        label = label.to(device)
+        loss = FocalLoss(class_weights)
+        ori_image = torch.clone(image)
 
-    images = images.to(device)
-    labels = labels.to(device)
+        for j in range(iters) :    
+            image.requires_grad = True
+            output = model(image)
 
-    print(labels.shape)
+            model.zero_grad()
+            cost = loss(output.float(), label.float()).to(device)
+            cost.backward()
 
-    if len(images.shape) == 3:
-        images = images.unsqueeze(0)
-
-    if images.shape[1] == 1:
-        images = images.repeat(1, 3, 1, 1)
-
-    adversarial_images = []
-
-    criterion = FocalLoss(class_weights.to(device))
-
-    for i, [input, label] in enumerate(dataloader):
-
-        x_adv = input.clone().detach().requires_grad_(True).to(device)
-        num_channels = input.shape[1]
-
-        for i in range(num_steps):
-            _x_adv = x_adv.clone().detach().requires_grad_(True)
-
-            output = model(_x_adv)
-
-            loss = criterion(output, label)
-            loss.backward()
-
-            with torch.no_grad():
-                if step_norm == 'inf':
-                    gradients = _x_adv.grad.sign() * step_size
-                else:
-                    # Note .view() assumes batched image data as 4D tensor
-                    gradients = _x_adv.grad * step_size / _x_adv.grad.view(_x_adv.shape[0], -1)\
-                        .norm(step_norm, dim=-1)\
-                        .view(-1, num_channels, 1, 1)
-            
-                x_adv += gradients
-
-            x_adv = torch.max(torch.min(x_adv, input + eps), input - eps)
-            
-            # delta = x_adv - input
-
-            # mask = delta.view(delta.shape[0], -1).norm(eps_norm, dim=1) <= eps
-            
-            # scaling_factor = delta.view(delta.shape[0], -1).norm(eps_norm, dim=1)
-            # scaling_factor[mask] = eps
-
-            # delta *= eps / scaling_factor.view(-1, 1, 1, 1)
-
-            # x_adv = x + delta
-
-            x_adv = x_adv.clamp(*clamp)
-
-        adversarial_images.append(x_adv)
-
-    return adversarial_images
-
+            adv_image = image + alpha*image.grad.sign()
+            eta = torch.clamp(adv_image - ori_image, min=-eps, max=eps)
+            image = torch.clamp(ori_image + eta, min=0, max=1).detach_()
+        outputs.append(image)
+    return outputs
