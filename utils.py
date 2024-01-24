@@ -271,17 +271,17 @@ def copy_images(image_dict, type):
     current_dir = os.getcwd()
 
     # Check whether the new file structure is already initialised
-    if not os.path.isdir(os.path.join(current_dir, "dataset", "train", "TA", "400")) or not os.path.isdir(os.path.join(current_dir, "dataset", "test", "TA", "400")):
+    if not os.path.isdir(os.path.join(current_dir, "dataset", "train", "original", "TA", "400")) or not os.path.isdir(os.path.join(current_dir, "dataset", "test", "original", "TA", "400")):
         for c in classes:
             for z in zooms:
-                os.makedirs(os.path.join(os.getcwd(), "dataset", "test", c, z))
-                os.makedirs(os.path.join(os.getcwd(), "dataset", "train", c, z))
+                os.makedirs(os.path.join(os.getcwd(), "dataset", "test", "original", c, z))
+                os.makedirs(os.path.join(os.getcwd(), "dataset", "train", "original", c, z))
 
     for c in classes:
         for z in zooms:
 
             # Destination path
-            dst = os.path.join(current_dir, "dataset", type, c, z)
+            dst = os.path.join(current_dir, "dataset", type, "original", c, z)
 
             # Remove all images currently in destination path
             for file in os.listdir(dst):
@@ -290,7 +290,7 @@ def copy_images(image_dict, type):
             # Copy all images from BreaKHis to dataset directory
             for image in image_dict[c][z]:
                 src = os.path.join(image)
-                dst = os.path.join(current_dir, "dataset", type, c, z)
+                dst = os.path.join(current_dir, "dataset", type, "original", c, z)
 
                 shutil.copy2(src, dst)
 
@@ -315,7 +315,7 @@ def check_corrupted_imgs(train_dict, test_dict):
     """This code checks the image paths for a correct split. If the split seems corrupted, the function calls copy_images which ensures a proper split.
     Input: the train dict retreived from the text file."""
     correct = True
-    copied_files = glob.glob("./dataset/train/A/40/*.png")
+    copied_files = glob.glob("./dataset/train/original/A/40/*.png")
     copied_files = [path.split("_")[-1] for path in copied_files]
 
     if len(train_dict["A"]["40"]) != len(copied_files):
@@ -373,12 +373,18 @@ def get_class_weigths(image_dict: dict):
     return class_weights
 
 
-def get_model(device, image_dict: dict, model:str="swin"):
+def get_model(device, model:str="swin"):
     torch.cuda.empty_cache()
 
     if model == "resnet":
         model_name = "timm/resnet18.a1_in1k"
         model_file = "models/Master_resnet.pth"
+    elif model == 'retrained_swin':
+        model_name = 'swinv2_tiny_window8_256.ms_in1k'
+        model_file = "models/Master_retrained_swin.pth"
+    elif model == 'retrained_resnet':
+        model_name = "timm/resnet18.a1_in1k"
+        model_file = "models/Master_retrained_resnet.pth"
     else:
         model_name = 'swinv2_tiny_window8_256.ms_in1k'
         model_file = "models/Master_swin.pth"
