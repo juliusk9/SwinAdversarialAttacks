@@ -230,13 +230,14 @@ class TA:
         images = dataloader.dataset.__getimages__()
         labels = dataloader.dataset.__getlabels__()
 
+        labels = [[i for i, v in enumerate(label[0]) if v == 1] for label in labels]
+
         labels = torch.argmax(labels, dim=1)
         
         images = images.to(self.device)
         labels = labels.to(self.device)
         # self.net = self.net.to(self.device)
 
-        print(labels.shape)
         # Assuming images is your input tensor
         if len(images.shape) == 3:  # If it's [channels, height, width]
             images = images.unsqueeze(0)  # Add a batch dimension

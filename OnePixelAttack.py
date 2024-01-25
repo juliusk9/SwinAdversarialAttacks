@@ -19,38 +19,38 @@ def perturb_image_one_pixel(x, img):
  
 
 
-def probability_classes(perturbation, image, org_class, model, device):
-    # For debugging purposes
-    #print("Perturbation in prob_clas", perturbation)
-    #print("Image at pert pixels", image[0, :, int(perturbation[0]), int(perturbation[1])])
+# def probability_classes(perturbation, image, org_class, model, device):
+#     # For debugging purposes
+#     #print("Perturbation in prob_clas", perturbation)
+#     #print("Image at pert pixels", image[0, :, int(perturbation[0]), int(perturbation[1])])
 
-    # Perturb image and store in pert_image
-    pert_image = perturb_image_one_pixel(perturbation, torch.clone(image))
+#     # Perturb image and store in pert_image
+#     pert_image = perturb_image_one_pixel(perturbation, torch.clone(image))
 
-    #print("Org Image after perturbation", image[0, :, int(perturbation[0]), int(perturbation[1])])
-    #print("Perturbed image", pert_image[0, :, int(perturbation[0]), int(perturbation[1])])
+#     #print("Org Image after perturbation", image[0, :, int(perturbation[0]), int(perturbation[1])])
+#     #print("Perturbed image", pert_image[0, :, int(perturbation[0]), int(perturbation[1])])
 
-    #print("Dimensions of ")
-    #print(np.shape(pert_image))
-    #print(np.shape(image))
+#     #print("Dimensions of ")
+#     #print(np.shape(pert_image))
+#     #print(np.shape(image))
 
-    comparison = torch.eq(image[0], pert_image[0])
+#     comparison = torch.eq(image[0], pert_image[0])
 
-    if len(torch.nonzero(~comparison)) == 0:
-        print("No difference between image and perturbed image")
+#     if len(torch.nonzero(~comparison)) == 0:
+#         print("No difference between image and perturbed image")
 
 
-    #print("number of pixels not equal:", [x for x in torch.eq(image, pert_image) if not x])
+#     #print("number of pixels not equal:", [x for x in torch.eq(image, pert_image) if not x])
     
-    output = model(torch.Tensor(pert_image).to(device))
+#     output = model(torch.Tensor(pert_image).to(device))
 
-    probabilities = torch.nn.functional.softmax(output, dim=1)
+#     probabilities = torch.nn.functional.softmax(output, dim=1)
 
-    adjusted_probability = probabilities[0][org_class]
+#     adjusted_probability = probabilities[0][org_class]
 
-    #print("Adj prob:", adjusted_probability)
+#     #print("Adj prob:", adjusted_probability)
 
-    return adjusted_probability.to('cpu').detach()
+#     return adjusted_probability.to('cpu').detach()
 
 
 def predict(perturbation, image, org_class, model, device, image_list, minimize=True):
@@ -82,27 +82,31 @@ def predict(perturbation, image, org_class, model, device, image_list, minimize=
     #print("Attacked_image", attacked_image)
     #print("Tensored Attackedimage", torch.Tensor(attacked_image))
 
-    original_output = model(image.to(device))
     perturbed_output = model(attacked_image.to(device))
 
 #     print("Original", original_output[0][0])
 #     print("Perturbed", perturbed_output[0][0])
+    
+    ## return the sum of the confs of the org classes 
+    sum = 0
+    for i in org_class:
+        sum += perturbed_output[0][i].item()
 
-    return perturbed_output[0][org_class].item()
+    return sum
 
 
-def attack_success(perturbation, image, org_class, model, device):
+def attack_success(perturbation, image, org_class: list, model, device):
 
     attacked_image = perturb_image_one_pixel(perturbation, torch.clone(image))
 
     # print("Checking if succesful")
     confidences = model(attacked_image.to(device))[0]
-    predicted_class = torch.argmax(confidences)
+    predicted_class = torch.argmax(confidences).item()
 
     # print(confidences)
     # print(predicted_class, org_class)
 
-    if predicted_class != org_class:
+    if predicted_class not in org_class:
         return True
 
 
@@ -123,7 +127,7 @@ def attack(index, model, device, dataloader, pixel_count=1, maxiter=50, popsize=
     pert_images = []
     # Clean up memory
     for i, (image, label) in enumerate(dataloader):
-        org_class = torch.argmax(label).item()
+        org_class = [index for index, value in enumerate(label) if value == 1]
 
         # This is the function taken by the differential evolution of SciPy to find the minimum of.
         image_list = []
