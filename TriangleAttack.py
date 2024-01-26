@@ -119,7 +119,7 @@ class TA:
         x = torch.clamp(x, 0, 1)
         label = self.get_label(self.net(x))
         queries += 1
-        if label != original_label:
+        if label not in original_label:
             x_hat = x
             left_theta = theta
             flag = 1
@@ -138,7 +138,7 @@ class TA:
             x = torch.clamp(x, 0, 1)
             label = self.get_label(self.net(x))
             queries += 1
-            if label != original_label:
+            if label not in original_label:
                 x_hat = x
                 left_theta = theta
                 flag = -1
@@ -159,7 +159,7 @@ class TA:
             x = torch.clamp(x, 0, 1)
             label = self.get_label(self.net(x))
             queries += 1
-            if label != original_label:
+            if label not in original_label:
                 left_theta = theta
                 x_hat = x
                 self.get_x_hat_in_2d_alpha += plus_learning_rate
@@ -180,7 +180,7 @@ class TA:
                 x = torch.clamp(x, 0, 1)
                 label = self.get_label(self.net(x))
                 queries += 1
-                if label != original_label:
+                if label not in original_label:
                     left_theta = theta
                     x_hat = x
                     self.get_x_hat_in_2d_alpha += plus_learning_rate
@@ -198,7 +198,7 @@ class TA:
 
 
     def get_x_hat_arbitary(self, x_o: torch.Tensor, original_label, init_x=None,dim_num=5):
-        if self.get_label(self.net(x_o)) != original_label:
+        if self.get_label(self.net(x_o)) not in original_label:
             return x_o, 1001, [[0, 0.], [1001, 0.]]
         if init_x is None:
             x_adv = self.get_x_adv(x_o, original_label, self.net)
@@ -230,10 +230,8 @@ class TA:
         images = dataloader.dataset.__getimages__()
         labels = dataloader.dataset.__getlabels__()
 
-        labels = [[i for i, v in enumerate(label[0]) if v == 1] for label in labels]
+        labels = [[i for i, v in enumerate(label) if v == 1] for label in labels]
 
-        labels = torch.argmax(labels, dim=1)
-        
         images = images.to(self.device)
         labels = labels.to(self.device)
         # self.net = self.net.to(self.device)
@@ -293,7 +291,10 @@ class TA:
 
             # ran until here [np.newaxis, :, :, :]
             print(self.max_iter_num_in_2d)
-            x_adv, q, intermediate = self.get_x_hat_arbitary(input, torch.argmax(label).to(self.device),
+
+            org_label = [i for i, v in enumerate(label) if v == 1]
+
+            x_adv, q, intermediate = self.get_x_hat_arbitary(input, org_label.to(self.device),
                                                         init_x=best_advs[i].unsqueeze(0), dim_num=self.dim_num)
             x_adv_list[i] = x_adv[0].to(self.device)
             diff = torch.norm(x_adv[0].to(self.device) - input, p=2) / (self.side_length * np.sqrt(3))
